@@ -44,9 +44,6 @@ RPC_Callback callback = {"setValue", processSetGpioState};
 // Set to true if application is subscribed for the RPC messages.
 bool subscribed = false;
 
-int ledState = LOW;
-int currentLedState = LOW;
-
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   

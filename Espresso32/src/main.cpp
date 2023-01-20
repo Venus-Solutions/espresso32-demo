@@ -3,11 +3,16 @@
 // Import ThingsBoard library
 #include <ThingsBoard.h>
 #include <WiFi.h>
-#include <ezButton.h>
 
 // Define I/O pins
-#define LED_PIN       3 // LED pin
-#define BUTTON_PIN    7 // Push button pin
+#define LED_PIN       16   // Built-in LED pin
+
+// Helper macro to calculate array size
+#define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
+
+void initilizeWiFi(void);
+const bool reconnect(void);
+RPC_Response processSetGpioState(const RPC_Data &data);
 
 constexpr char WIFI_SSID[] PROGMEM = "YOUR_WIFI_SSID";
 constexpr char WIFI_PASSWORD[] PROGMEM = "YOUR_WIFI_PASSWORD";
@@ -33,24 +38,17 @@ WiFiClient espClient;
 // Initialize ThingsBoard instance with the maximum needed buffer size
 ThingsBoardSized<MAX_MESSAGE_SIZE> tb(espClient);
 
-ezButton button(BUTTON_PIN);
+// RPC handlers
+RPC_Callback callback = {"setValue", processSetGpioState};
+
+// Set to true if application is subscribed for the RPC messages.
+bool subscribed = false;
 
 int ledState = LOW;
-int buttonState = LOW;
-
-void initilizeWiFi(void);
-const bool reconnect(void);
+int currentLedState = LOW;
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
-  // Set debounce time to 50 milliseconds
-  button.setDebounceTime(50);
-
-  // If analog input pin 0 is unconnected, random analog
-  // noise will cause the call to randomSeed() to generate
-  // different seed numbers each time the sketch runs.
-  // randomSeed() will then shuffle the random function.
-  randomSeed(analogRead(0));
   
   // Initalize serial connection for debugging
   Serial.begin(SERIAL_DEBUG_BAUD);
@@ -58,39 +56,37 @@ void setup() {
 }
 
 void loop() {
-  button.loop();
-
-  if (button.isPressed()) {
-    Serial.println("The button is pressed");
-
-    // Toggle state
-    ledState = !ledState;
-    buttonState = !buttonState;
-
-    digitalWrite(LED_PIN, ledState);
-  }
-
   if (!reconnect()) {
     return;
   }
 
   if (!tb.connected()) {
+    subscribed = false;
+
     // Connect to the TonySpace
     Serial.print("Connecting to: ");
     Serial.print(THINGSBOARD_SERVER);
     Serial.print(" with token ");
     Serial.println(TOKEN);
-    if (!tb.connect(THINGSBOARD_SERVER, TOKEN, THINGSBOARD_PORT)) {
+    if (!tb.connect(THINGSBOARD_SERVER, TOKEN)) {
       Serial.println("Failed to connect");
       return;
     }
   }
 
-  Serial.println("Sending data...");
-  tb.sendTelemetryInt("temperature", random(10, 31));
-  tb.sendTelemetryInt("humidity", random(40, 90));
-  tb.sendTelemetryBool("led", (bool)ledState);
-  tb.sendTelemetryBool("button", (bool)buttonState);
+  if (!subscribed) {
+    Serial.println("Subscribing for RPC... ");
+
+    // Perform a subscription. All consequent data processing will happen in
+    // callbacks as denoted by callbacks[] array.
+    if (!tb.RPC_Subscribe(callback)) {
+      Serial.println("Failed to subscribe for RPC");
+      return;
+    }
+
+    Serial.println("Subscribe done");
+    subscribed = true;
+  }
 
   tb.loop();
 }
@@ -117,4 +113,17 @@ const bool reconnect(void) {
   // If we aren't establish a new connection to the given WiFi network
   initilizeWiFi();
   return true;
+}
+
+RPC_Response processSetGpioState(const RPC_Data &data) {
+  Serial.println("Received the set GPIO RPC method");
+
+  int led = data;
+
+  Serial.print("Setting LED to state ");
+  Serial.println(led);
+
+  digitalWrite(LED_PIN, data ? HIGH : LOW);
+
+  return RPC_Response(NULL, data);
 }

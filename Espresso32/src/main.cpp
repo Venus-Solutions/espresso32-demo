@@ -14,7 +14,7 @@ void initilizeWiFi(void);
 const bool reconnect(void);
 RPC_Response processSetGpioState(const RPC_Data &data);
 
-constexpr char WIFI_SSID[] PROGMEM = "YOUR_WIFI_SSID";
+constexpr char WIFI_SSID[] PROGMEM = "YOUR_WIFI_SSID"; 
 constexpr char WIFI_PASSWORD[] PROGMEM = "YOUR_WIFI_PASSWORD";
 
 // to understand how to obtain an access token
@@ -118,12 +118,13 @@ const bool reconnect(void) {
 RPC_Response processSetGpioState(const RPC_Data &data) {
   Serial.println("Received the set GPIO RPC method");
 
-  int led = data;
+  int state = data;
 
   Serial.print("Setting LED to state ");
-  Serial.println(led);
+  Serial.println(state);
 
-  digitalWrite(LED_PIN, data ? HIGH : LOW);
+  digitalWrite(LED_PIN, !state ? HIGH : LOW);
+  tb.sendAttributeBool("value", !digitalRead(LED_PIN));
 
   return RPC_Response(NULL, data);
 }
